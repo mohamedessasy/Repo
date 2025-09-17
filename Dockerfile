@@ -3,36 +3,71 @@ FROM nvidia/cuda:12.4.1-devel-ubuntu22.04
 WORKDIR /app
 ENV DEBIAN_FRONTEND=noninteractive
 
-# 🔧 تثبيت المكتبات الأساسية + Vulkan من Mesa (للتأكد من وجود الأدوات)
+# Install base libraries, Vulkan drivers, NVIDIA ICD, and diagnostic tools
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
     ca-certificates curl wget unzip python3 python3-pip \
-    libvulkan1 mesa-vulkan-drivers vulkan-tools && \
+    libvulkan1 mesa-vulkan-drivers vulkan-tools \
+    nvidia-driver-535 nvidia-vulkan-icd-535 pciutils clinfo && \
     rm -rf /var/lib/apt/lists/*
 
-# 🔧 تثبيت PyTorch متوافق مع CUDA 12.4 (بدون مشاكل)
+# Install PyTorch compatible with CUDA 12.4
 RUN pip install --no-cache-dir torch torchvision --index-url https://download.pytorch.org/whl/cu124
 
-# 🔧 تثبيت باقي المتطلبات
+# Install Python dependencies
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# 🔧 تحميل waifu2x
+# Download waifu2x binary
 RUN wget -O /tmp/waifu2x.zip \
     https://github.com/nihui/waifu2x-ncnn-vulkan/releases/download/20220728/waifu2x-ncnn-vulkan-20220728-ubuntu.zip && \
     unzip /tmp/waifu2x.zip -d /tmp && rm /tmp/waifu2x.zip && \
     mv /tmp/waifu2x-ncnn-vulkan-20220728-ubuntu /app/waifu2x && \
     chmod +x /app/waifu2x/waifu2x-ncnn-vulkan
 
-# نسخ الكود
+# Copy the handler
 COPY handler.py /app/handler.py
 
-# إعداد البيئة
+# Set Vulkan and NVIDIA environment variables
 ENV VK_ICD_FILENAMES=/etc/vulkan/icd.d/nvidia_icd.json
 ENV VK_LAYER_PATH=/etc/vulkan/explicit_layer.d
+ENV NVIDIA_VISIBLE_DEVICES=all
+ENV NVIDIA_DRIVER_CAPABILITIES=compute,utility,graphics
 
-# اختبار أثناء الـ build (اختياري)
-RUN ls -l /etc/vulkan/icd.d || echo "⚠️ No ICD found!"
+# Build-time check: fail if NVIDIA ICD is missing
+RUN if [ ! -f /etc/vulkan/icd.d/nvidia_icd.json ]; then \
+      echo "❌ NVIDIA ICD file NOT found! Vulkan may not work properly." && exit 1; \
+    else \
+      echo "✅ NVIDIA ICD file found. Vulkan should be available."; \
+    fi
+
+# Optional: Show Vulkan driver info for diagnostics
+RUN vulkaninfo | grep "driver" || echo "⚠️ Vulkaninfo could not detect driver during build - will check at runtime"
 
 EXPOSE 80
-CMD ["uvicorn", "handler:app", "--host", "0.0.0.0", "--port", "80"]
+
+# Runtime startup script with GPU and waifu2x self-test
+CMD bash -c '\
+    echo "🔍 Checking GPU availability..." && \
+    if ! command -v vulkaninfo &> /dev/null; then \
+        echo "⚠️ vulkaninfo not found, skipping check"; \
+    else \
+        if ! vulkaninfo | grep -q "GPU id"; then \
+            echo "❌ No GPU detected by Vulkan! Check NVIDIA runtime / driver." && exit 1; \
+        else \
+            echo "✅ GPU successfully detected by Vulkan."; \
+        fi; \
+    fi && \
+    echo "🧪 Running waifu2x self-test..." && \
+    python3 - <<'EOF'
+import numpy as np
+from PIL import Image
+import os
+img = Image.new("RGB", (1, 1), color=(255, 255, 255))
+img.save("/tmp/test.jpg", "JPEG")
+EOF
+    /app/waifu2x/waifu2x-ncnn-vulkan -i /tmp/test.jpg -o /tmp/test_up.jpg -s 2 -n 0 -f jpg -m /app/waifu2x/models-cunet -g 0 || { \
+        echo "❌ waifu2x failed to run on GPU. Check drivers or model files."; exit 1; } && \
+    echo "✅ waifu2x self-test passed." && \
+    uvicorn handler:app --host 0.0.0.0 --port 80 \
+'
