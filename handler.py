@@ -46,7 +46,7 @@ def upscale(req: ImageRequest):
             "-n", str(req.noise),
             "-f", "jpg",
             "-m", MODELS_DIR,
-            "-g", "0"
+            "-g", "auto"
         ]
 
         print(f"[DEBUG] Running command: {' '.join(cmd)}", flush=True)
@@ -75,4 +75,5 @@ if __name__ == "__main__":
     port = int(os.getenv("PORT", 80))
     print(f"[DEBUG] Starting server on port {port} ...", flush=True)
     uvicorn.run(app, host="0.0.0.0", port=port)
+
 
