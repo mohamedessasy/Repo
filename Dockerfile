@@ -16,7 +16,6 @@ RUN wget -O /tmp/waifu2x.zip \
     chmod +x /app/waifu2x/waifu2x-ncnn-vulkan
 
 COPY handler.py /app/handler.py
-COPY upscale_api.py /app/upscale_api.py
 RUN mkdir -p /app/api_temp
 
 EXPOSE 80
