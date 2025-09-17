@@ -2,8 +2,11 @@ FROM runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04
 
 WORKDIR /app
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    ca-certificates curl wget unzip libvulkan1 mesa-vulkan-drivers vulkan-utils && \
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+    ca-certificates curl wget unzip libvulkan1 vulkan-tools mesa-vulkan-drivers && \
     rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
