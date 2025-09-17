@@ -1,10 +1,7 @@
-import os
-import uuid
-import base64
-import subprocess
+import os, uuid, base64, subprocess
 from fastapi import FastAPI
-from pydantic import BaseModel
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel
 
 WAIFU2X_BIN = "/app/waifu2x/waifu2x-ncnn-vulkan"
 MODELS_DIR = "/app/waifu2x/models-cunet"
@@ -28,6 +25,7 @@ def upscale(req: ImageRequest):
 
         in_path = f"/tmp/{uuid.uuid4()}.png"
         out_path = f"/tmp/{uuid.uuid4()}_up.png"
+
         with open(in_path, "wb") as f:
             f.write(base64.b64decode(req.image))
 
@@ -41,7 +39,7 @@ def upscale(req: ImageRequest):
         if result.returncode != 0 or not os.path.exists(out_path):
             return JSONResponse(
                 {"error": "waifu2x failed", "stderr": result.stderr, "stdout": result.stdout},
-                status_code=500,
+                status_code=500
             )
 
         with open(out_path, "rb") as f:
@@ -53,5 +51,5 @@ def upscale(req: ImageRequest):
 
 if __name__ == "__main__":
     import uvicorn
-    port = int(os.getenv("PORT", 80))  # الآن يتطابق مع إعدادات RunPod
+    port = int(os.getenv("PORT", 80))
     uvicorn.run(app, host="0.0.0.0", port=port)
