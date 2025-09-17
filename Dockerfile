@@ -25,7 +25,7 @@ RUN wget -O /tmp/waifu2x.zip \
     mv /tmp/waifu2x-ncnn-vulkan-20220728-ubuntu /app/waifu2x && \
     chmod +x /app/waifu2x/waifu2x-ncnn-vulkan
 
-# Copy the handler
+# Copy handler
 COPY handler.py /app/handler.py
 
 # Set Vulkan and NVIDIA environment variables
@@ -34,7 +34,7 @@ ENV VK_LAYER_PATH=/etc/vulkan/explicit_layer.d
 ENV NVIDIA_VISIBLE_DEVICES=all
 ENV NVIDIA_DRIVER_CAPABILITIES=compute,utility,graphics
 
-# Build-time check: fail if NVIDIA ICD is missing
+# Build-time check: ensure NVIDIA ICD file exists
 RUN if [ ! -f /etc/vulkan/icd.d/nvidia_icd.json ]; then \
       echo "❌ NVIDIA ICD file NOT found! Vulkan may not work properly." && exit 1; \
     else \
@@ -46,7 +46,7 @@ RUN vulkaninfo | grep "driver" || echo "⚠️ Vulkaninfo could not detect drive
 
 EXPOSE 80
 
-# Runtime startup script with GPU and waifu2x self-test
+# Runtime startup: GPU check + waifu2x self-test + launch API
 CMD bash -c '\
     echo "🔍 Checking GPU availability..." && \
     if ! command -v vulkaninfo &> /dev/null; then \
@@ -59,10 +59,8 @@ CMD bash -c '\
         fi; \
     fi && \
     echo "🧪 Running waifu2x self-test..." && \
-    python3 - <<'EOF'
-import numpy as np
+    python3 - <<EOF
 from PIL import Image
-import os
 img = Image.new("RGB", (1, 1), color=(255, 255, 255))
 img.save("/tmp/test.jpg", "JPEG")
 EOF
