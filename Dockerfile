@@ -19,6 +19,6 @@ COPY handler.py /app/handler.py
 COPY upscale_api.py /app/upscale_api.py
 RUN mkdir -p /app/api_temp
 
-EXPOSE 3000
+EXPOSE 80
 
-CMD ["uvicorn", "handler:app", "--host", "0.0.0.0", "--port", "3000"]
+CMD ["uvicorn", "handler:app", "--host", "0.0.0.0", "--port", "80"]
