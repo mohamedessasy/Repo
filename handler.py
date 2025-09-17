@@ -1,22 +1,38 @@
-import runpod
-import subprocess
 import os
 import uuid
 import base64
+import subprocess
+from fastapi import FastAPI
+from pydantic import BaseModel
+from fastapi.responses import JSONResponse
 
 WAIFU2X_BIN = "/app/waifu2x/waifu2x-ncnn-vulkan"
 MODELS_DIR = "/app/waifu2x/models-cunet"
 
-def handler(event):
+app = FastAPI()
+
+# نموذج البيانات المستقبلة
+class ImageRequest(BaseModel):
+    image: str
+    scale: int = 2
+    noise: int = 2
+
+
+@app.get("/ping")
+def ping():
+    """مسار اختبار صحة الخدمة، يستخدمه Load Balancer."""
+    return {"status": "ok"}
+
+
+@app.post("/")
+def upscale(req: ImageRequest):
     try:
-        # قراءة البيانات من JSON
-        input_data = event.get("input", {})
-        image_b64 = input_data.get("image")
-        scale = int(input_data.get("scale", 2))
-        noise = int(input_data.get("noise", 2))
+        image_b64 = req.image
+        scale = int(req.scale)
+        noise = int(req.noise)
 
         if not image_b64:
-            return {"error": "No image provided in input."}
+            return JSONResponse(content={"error": "No image provided in input."}, status_code=400)
 
         # حفظ الصورة المدخلة مؤقتاً
         in_path = f"/tmp/{uuid.uuid4()}.png"
@@ -40,20 +56,26 @@ def handler(event):
         result = subprocess.run(cmd, capture_output=True, text=True)
 
         if result.returncode != 0 or not os.path.exists(out_path):
-            return {
-                "error": "waifu2x failed",
-                "stderr": result.stderr,
-                "stdout": result.stdout
-            }
+            return JSONResponse(
+                content={
+                    "error": "waifu2x failed",
+                    "stderr": result.stderr,
+                    "stdout": result.stdout
+                },
+                status_code=500
+            )
 
-        # تحويل الصورة الناتجة لـ Base64
+        # تحويل الصورة الناتجة إلى Base64
         with open(out_path, "rb") as f:
             result_b64 = base64.b64encode(f.read()).decode("utf-8")
 
         return {"output": result_b64}
 
     except Exception as e:
-        return {"error": str(e)}
+        return JSONResponse(content={"error": str(e)}, status_code=500)
 
-# بدء السيرفر
-runpod.serverless.start({"handler": handler})
+
+if __name__ == "__main__":
+    import uvicorn
+    port = int(os.getenv("PORT", 3000))  # RunPod يمرر PORT كمتغير بيئة
+    uvicorn.run(app, host="0.0.0.0", port=port)
