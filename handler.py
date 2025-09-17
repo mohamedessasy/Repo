@@ -1,32 +1,18 @@
-import os
-import base64
-import io
-import torch
+import os, io, uuid, base64, subprocess
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from PIL import Image
-from realesrgan import RealESRGANer
+
+WAIFU2X_BIN = "/app/waifu2x/waifu2x-ncnn-vulkan"
+MODELS_DIR = "/app/waifu2x/models-cunet"
 
 app = FastAPI()
-
-# Lazy-load ESRGAN model only once
-model = None
-def load_model():
-    global model
-    if model is None:
-        print("[INFO] Loading Real-ESRGAN model...")
-        model = RealESRGANer(
-            model_path=None,  # Auto-download on first run
-            model_name='RealESRGAN_x4plus',
-            half=True if torch.cuda.is_available() else False,
-            device='cuda' if torch.cuda.is_available() else 'cpu'
-        )
-    return model
 
 class ImageRequest(BaseModel):
     image: str
     scale: int = 2
+    noise: int = 0
 
 @app.get("/ping")
 def ping():
@@ -38,17 +24,30 @@ def upscale(req: ImageRequest):
         if not req.image:
             return JSONResponse(content={"error": "No image provided"}, status_code=400)
 
+        in_path = f"/tmp/{uuid.uuid4()}.jpg"
+        out_path = f"/tmp/{uuid.uuid4()}_up.jpg"
+
         img_bytes = base64.b64decode(req.image)
         img = Image.open(io.BytesIO(img_bytes)).convert("RGB")
+        img.save(in_path, "JPEG", quality=95)
 
-        model = load_model()
-        output, _ = model.enhance(img, outscale=req.scale)
+        cmd = [
+            WAIFU2X_BIN, "-i", in_path, "-o", out_path,
+            "-s", str(req.scale), "-n", str(req.noise),
+            "-f", "jpg", "-m", MODELS_DIR, "-g", "auto"
+        ]
 
-        buf = io.BytesIO()
-        output.save(buf, format="JPEG", quality=95)
-        result_b64 = base64.b64encode(buf.getvalue()).decode("utf-8")
+        result = subprocess.run(cmd, capture_output=True, text=True)
 
-        return {"output": result_b64}
+        if result.returncode != 0 or not os.path.exists(out_path):
+            return JSONResponse(content={"error": "waifu2x failed",
+                                         "stderr": result.stderr,
+                                         "stdout": result.stdout}, status_code=500)
+
+        with open(out_path, "rb") as f:
+            b64_out = base64.b64encode(f.read()).decode("utf-8")
+
+        return {"output": b64_out}
 
     except Exception as e:
         return JSONResponse(content={"error": str(e)}, status_code=500)
