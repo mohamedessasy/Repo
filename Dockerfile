@@ -35,7 +35,7 @@ ENV NVIDIA_DRIVER_CAPABILITIES=compute,utility,graphics
 
 EXPOSE 80
 
-# 🚀 Startup with GPU + waifu2x check
+# 🚀 Startup with GPU + waifu2x check.
 CMD bash -c '\
     echo "🔍 Checking GPU availability..." && \
     if command -v vulkaninfo >/dev/null 2>&1 && vulkaninfo | grep -q "GPU id"; then \
@@ -50,3 +50,4 @@ CMD bash -c '\
     echo \"✅ waifu2x self-test passed.\" && \
     uvicorn handler:app --host 0.0.0.0 --port 80 \
 '
+
