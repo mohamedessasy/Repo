@@ -9,14 +9,15 @@ from pydantic import BaseModel
 from PIL import Image
 
 WAIFU2X_BIN = "/app/waifu2x-converter-cpp/build/waifu2x-converter-cpp"
-MODEL_PATH = "/app/waifu2x-converter-cpp/models_rgb"  # ✅ مسار مطلق للنماذج
+MODEL_PATH = "/app/waifu2x-converter-cpp/models_rgb"
 
 app = FastAPI()
 
 class ImageRequest(BaseModel):
     image: str
-    scale: int = 2
-    noise: int = 0  # 0 = بدون إزالة ضوضاء
+    scale: float = 2.0
+    noise: int = 0
+    model: str | None = None  # دعم اختيار موديل اختياري
 
 @app.get("/ping")
 def ping():
@@ -24,11 +25,12 @@ def ping():
 
 @app.post("/")
 def upscale(req: ImageRequest):
+    in_path, out_path = None, None
     try:
         if not req.image:
             return JSONResponse(content={"error": "No image provided"}, status_code=400)
 
-        # 🖼️ حفظ الصورة كملف مؤقت
+        # 🖼️ حفظ الصورة في ملف مؤقت
         in_path = f"/tmp/{uuid.uuid4()}.jpg"
         out_path = f"/tmp/{uuid.uuid4()}_up.jpg"
 
@@ -36,7 +38,7 @@ def upscale(req: ImageRequest):
         img = Image.open(io.BytesIO(img_bytes)).convert("RGB")
         img.save(in_path, format="JPEG", quality=95)
 
-        # 🔧 تجهيز الأمر باستخدام مسار مطلق للنماذج
+        # تجهيز أمر waifu2x
         cmd = [
             WAIFU2X_BIN,
             "-i", in_path,
@@ -45,10 +47,13 @@ def upscale(req: ImageRequest):
             "--noise-level", str(req.noise),
             "-m", "noise-scale",
             "--model-dir", MODEL_PATH,
-            "-q", "90"
+            "-q", "100"
         ]
 
-        print(f"[DEBUG] Running command: {' '.join(cmd)}", flush=True)
+        if req.model:  # ✅ السماح بتحديد موديل مختلف لو أرسل من image_utils
+            cmd.extend(["--model-dir", f"/app/waifu2x-converter-cpp/{req.model}"])
+
+        print(f"[DEBUG] Running: {' '.join(cmd)}", flush=True)
         result = subprocess.run(cmd, capture_output=True, text=True)
 
         print("[DEBUG] waifu2x stdout:", result.stdout, flush=True)
@@ -66,15 +71,13 @@ def upscale(req: ImageRequest):
         return {"output": result_b64}
 
     except Exception as e:
-        print(f"[ERROR] Exception: {e}", flush=True)
         return JSONResponse(content={"error": str(e)}, status_code=500)
-
     finally:
         # 🧹 تنظيف الملفات المؤقتة
         try:
-            if os.path.exists(in_path):
+            if in_path and os.path.exists(in_path):
                 os.remove(in_path)
-            if os.path.exists(out_path):
+            if out_path and os.path.exists(out_path):
                 os.remove(out_path)
         except:
             pass
