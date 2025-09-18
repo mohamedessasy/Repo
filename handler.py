@@ -9,7 +9,7 @@ from pydantic import BaseModel
 from PIL import Image
 
 WAIFU2X_BIN = "/app/waifu2x/waifu2x-ncnn-vulkan"
-MODELS_DIR = "/app/waifu2x/models-cunet"
+MODEL_PATH = "/app/waifu2x/models-upconv_7_anime_style_art_rgb"  # ✅ استخدام الموديل الجديد
 
 app = FastAPI()
 
@@ -28,6 +28,7 @@ def upscale(req: ImageRequest):
         if not req.image:
             return JSONResponse(content={"error": "No image provided"}, status_code=400)
 
+        # 🖼️ حفظ الصورة في ملف مؤقت
         in_path = f"/tmp/{uuid.uuid4()}.jpg"
         out_path = f"/tmp/{uuid.uuid4()}_up.jpg"
 
@@ -35,17 +36,17 @@ def upscale(req: ImageRequest):
         img = Image.open(io.BytesIO(img_bytes)).convert("RGB")
         img.save(in_path, format="JPEG", quality=95)
 
+        # 🔧 تجهيز الأمر مع المتغيرات الصحيحة
         cmd = [
-        "/app/waifu2x/waifu2x-ncnn-vulkan",
-        "-i", input_path,
-        "-o", output_path,
-        "-s", str(scale),
-        "-n", str(noise),
-        "-f", "jpg",
-        "-m", "/app/waifu2x/models-upconv_7_anime_style_art_rgb", 
-        "-g", "auto"
+            WAIFU2X_BIN,
+            "-i", in_path,
+            "-o", out_path,
+            "-s", str(req.scale),
+            "-n", str(req.noise),
+            "-f", "jpg",
+            "-m", MODEL_PATH,
+            "-g", "auto"
         ]
-
 
         print(f"[DEBUG] Running command: {' '.join(cmd)}", flush=True)
         result = subprocess.run(cmd, capture_output=True, text=True)
@@ -68,3 +69,12 @@ def upscale(req: ImageRequest):
         print(f"[ERROR] Exception: {e}", flush=True)
         return JSONResponse(content={"error": str(e)}, status_code=500)
 
+    finally:
+        # 🧹 تنظيف الملفات المؤقتة
+        try:
+            if os.path.exists(in_path):
+                os.remove(in_path)
+            if os.path.exists(out_path):
+                os.remove(out_path)
+        except:
+            pass
