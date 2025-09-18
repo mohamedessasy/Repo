@@ -36,15 +36,16 @@ def upscale(req: ImageRequest):
         img.save(in_path, format="JPEG", quality=95)
 
         cmd = [
-            WAIFU2X_BIN,
-            "-i", in_path,
-            "-o", out_path,
-            "-s", str(req.scale),
-            "-n", str(req.noise),
-            "-f", "jpg",
-            "-m", MODELS_DIR,
-            "-g", "auto"
+        "/app/waifu2x/waifu2x-ncnn-vulkan",
+        "-i", input_path,
+        "-o", output_path,
+        "-s", str(scale),
+        "-n", str(noise),
+        "-f", "jpg",
+        "-m", "/app/waifu2x/models-upconv_7_anime_style_art_rgb", 
+        "-g", "auto"
         ]
+
 
         print(f"[DEBUG] Running command: {' '.join(cmd)}", flush=True)
         result = subprocess.run(cmd, capture_output=True, text=True)
@@ -66,3 +67,4 @@ def upscale(req: ImageRequest):
     except Exception as e:
         print(f"[ERROR] Exception: {e}", flush=True)
         return JSONResponse(content={"error": str(e)}, status_code=500)
+
