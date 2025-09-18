@@ -8,15 +8,15 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from PIL import Image
 
-WAIFU2X_BIN = "/app/waifu2x/waifu2x-ncnn-vulkan"
-MODEL_PATH = "/app/waifu2x/models-upconv_7_anime_style_art_rgb"  # ✅ استخدام الموديل الجديد
+WAIFU2X_BIN = "/app/waifu2x-converter-cpp/build/waifu2x-converter-cpp"
+MODEL_PATH = "/app/waifu2x-converter-cpp/models_rgb"  # ✅ مسار مطلق للنماذج
 
 app = FastAPI()
 
 class ImageRequest(BaseModel):
     image: str
     scale: int = 2
-    noise: int = 0  # 0 = no denoise
+    noise: int = 0  # 0 = بدون إزالة ضوضاء
 
 @app.get("/ping")
 def ping():
@@ -28,7 +28,7 @@ def upscale(req: ImageRequest):
         if not req.image:
             return JSONResponse(content={"error": "No image provided"}, status_code=400)
 
-        # 🖼️ حفظ الصورة في ملف مؤقت
+        # 🖼️ حفظ الصورة كملف مؤقت
         in_path = f"/tmp/{uuid.uuid4()}.jpg"
         out_path = f"/tmp/{uuid.uuid4()}_up.jpg"
 
@@ -36,18 +36,17 @@ def upscale(req: ImageRequest):
         img = Image.open(io.BytesIO(img_bytes)).convert("RGB")
         img.save(in_path, format="JPEG", quality=95)
 
-        # 🔧 تجهيز الأمر مع المتغيرات الصحيحة
+        # 🔧 تجهيز الأمر باستخدام مسار مطلق للنماذج
         cmd = [
-        "/app/waifu2x-converter-cpp/build/waifu2x-converter-cpp",
-        "-i", in_path,
-        "-o", out_path,
-        "--scale-ratio", str(req.scale),
-        "--noise-level", str(req.noise),
-        "-m", "noise-scale",
-        "--model-dir", "../models_rgb",
-        "-q", "90"
+            WAIFU2X_BIN,
+            "-i", in_path,
+            "-o", out_path,
+            "--scale-ratio", str(req.scale),
+            "--noise-level", str(req.noise),
+            "-m", "noise-scale",
+            "--model-dir", MODEL_PATH,
+            "-q", "90"
         ]
-
 
         print(f"[DEBUG] Running command: {' '.join(cmd)}", flush=True)
         result = subprocess.run(cmd, capture_output=True, text=True)
@@ -79,4 +78,3 @@ def upscale(req: ImageRequest):
                 os.remove(out_path)
         except:
             pass
-
