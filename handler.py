@@ -38,15 +38,16 @@ def upscale(req: ImageRequest):
 
         # 🔧 تجهيز الأمر مع المتغيرات الصحيحة
         cmd = [
-            WAIFU2X_BIN,
-            "-i", in_path,
-            "-o", out_path,
-            "-s", str(req.scale),
-            "-n", str(req.noise),
-            "-f", "jpg",
-            "-m", MODEL_PATH,
-            "-g", "auto"
+        "/app/waifu2x-converter-cpp/build/waifu2x-converter-cpp",
+        "-i", in_path,
+        "-o", out_path,
+        "--scale-ratio", str(req.scale),
+        "--noise-level", str(req.noise),
+        "-m", "noise-scale",
+        "--model-dir", "../models_rgb",
+        "-q", "90"
         ]
+
 
         print(f"[DEBUG] Running command: {' '.join(cmd)}", flush=True)
         result = subprocess.run(cmd, capture_output=True, text=True)
@@ -78,3 +79,4 @@ def upscale(req: ImageRequest):
                 os.remove(out_path)
         except:
             pass
+
