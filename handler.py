@@ -16,7 +16,7 @@ app = FastAPI()
 class ImageRequest(BaseModel):
     image: str
     scale: float = 2.0
-    noise: int = 0
+    noise: int = 3
     model: str | None = None  # دعم اختيار موديل اختياري
 
 @app.get("/ping")
@@ -81,3 +81,4 @@ def upscale(req: ImageRequest):
                 os.remove(out_path)
         except:
             pass
+
